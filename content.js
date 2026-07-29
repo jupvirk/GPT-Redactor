@@ -5,10 +5,10 @@ const EMAIL_REGEX = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;// any cha
 const NAME_REGEX = /\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+\b/g;//capital followed by lowercase, space, same again, first last
 
 function sanitizeText(rawText) {
-  // 1. Replace emails with [REDACTED EMAIL]
+  // Replace emails with [EMAIL]
   let cleanText = rawText.replace(EMAIL_REGEX, "[EMAIL]");
 
-  // 2. Replace potential full names with [REDACTED NAME]
+  // Replace potential full names with [NAME]
   cleanText = cleanText.replace(NAME_REGEX, "[NAME]");
 
   return cleanText;
@@ -23,21 +23,27 @@ function handlePromptSubmission() {
     // Only log if there is actually text typed
     if (userPrompt.trim().length > 0) {
       const safePrompt = sanitizeText(userPrompt);
+      // Overwrite the DOM input element's text with the safe prompt, again works for both div and textarea
+      if (chatInput.tagName === "TEXTAREA" || chatInput.value !== undefined) {
+        chatInput.value = safePrompt;
+      } else {
+        chatInput.innerText = safePrompt;
+      }
 
       console.log("Original Prompt:", userPrompt);
-      console.log("Sanitized Prompt:", safePrompt);
+      console.log("Replaced with Sanitized Prompt:", safePrompt);
     }
   }
 }
 
-// 1. Listen for the "Enter" key press
+// Listen for the Enter key press
 document.addEventListener("keydown", function (event) {
   if (event.key === "Enter" && !event.shiftKey) {
     handlePromptSubmission();
   }
 });
 
-// 2. Listen for clicks on the Send Arrow Button
+// Listen for clicks on the Send Arrow Button
 document.addEventListener("click", function (event) {
   // Check if the clicked element (or its parent icon) is the send button
   const sendButton = event.target.closest('button[data-testid="send-button"]');
