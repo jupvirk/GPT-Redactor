@@ -1,4 +1,4 @@
-console.log("PII Redactor Content Script Loaded!");
+console.log("PII Redactor Content Script Loaded");
 
 // Define our Regex Patterns
 const EMAIL_REGEX = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;// any character, @, any character, ., 2 or more characters, g means global search, so it will find all emails in the prompt
@@ -31,13 +31,14 @@ function handlePromptSubmission() {
     // Only log if there is actually text typed
     if (userPrompt.trim().length > 0) {
       const safePrompt = sanitizeText(userPrompt);
-      // Overwrite the DOM input element's text with the safe prompt, again works for both div and textarea
+      // 1. Overwrite the DOM input element's text with the safe prompt, again works for both div and textarea
       if (chatInput.tagName === "TEXTAREA" || chatInput.value !== undefined) {
         chatInput.value = safePrompt;
       } else {
         chatInput.innerText = safePrompt;
       }
-
+      // 2. FORCE React to notice the change before sending
+      chatInput.dispatchEvent(new Event("input", { bubbles: true }));
       console.log("Original Prompt:", userPrompt);
       console.log("Replaced with Sanitized Prompt:", safePrompt);
     }
@@ -46,7 +47,7 @@ function handlePromptSubmission() {
 
 // Listen for the Enter key press
 document.addEventListener("keydown", function (event) {
-  if (event.key === "Enter" && !event.shiftKey) {
+  if (event.key === "Enter" && !event.shiftKey) {//prevents shift key
     handlePromptSubmission();
   }
 });
