@@ -3,6 +3,8 @@ console.log("PII Redactor Content Script Loaded!");
 // Define our Regex Patterns
 const EMAIL_REGEX = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;// any character, @, any character, ., 2 or more characters, g means global search, so it will find all emails in the prompt
 const NAME_REGEX = /\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+\b/g;//capital followed by lowercase, space, same again, first last
+const PHONE_REGEX = /\b(?:\+?1[-. ]?)?\(?([0-9]{3})\)?[-. ]?([0-9]{3})[-. ]?([0-9]{4})\b/g;
+const SSN_REGEX = /\b(?!000|666|9\d{2})\d{3}[- ]?(?!00)\d{2}[- ]?(?!0000)\d{4}\b/g;
 
 function sanitizeText(rawText) {
   // Replace emails with [EMAIL]
@@ -10,6 +12,12 @@ function sanitizeText(rawText) {
 
   // Replace potential full names with [NAME]
   cleanText = cleanText.replace(NAME_REGEX, "[NAME]");
+
+  // Replace phone numbers with [PHONE]
+  cleanText = cleanText.replace(PHONE_REGEX, "[PHONE]");
+
+  // Replace SSNs with [SSN]
+  cleanText = cleanText.replace(SSN_REGEX, "[SSN]");
 
   return cleanText;
 }
