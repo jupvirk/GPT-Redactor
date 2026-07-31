@@ -27,38 +27,42 @@ function handlePromptSubmission() {
 
   if (chatInput) {
     const userPrompt = chatInput.innerText || chatInput.value; //innerText for div, used by modern webapps, custom element; value for textarea,  a standard HTML text area. An AI could be using either one
-      
-    // Only log if there is actually text typed
+    
     if (userPrompt.trim().length > 0) {
       const safePrompt = sanitizeText(userPrompt);
-      // 1. Overwrite the DOM input element's text with the safe prompt, again works for both div and textarea
-      if (chatInput.tagName === "TEXTAREA" || chatInput.value !== undefined) {
-        chatInput.value = safePrompt;
+
+      // 1. Force React to recognize the change via native property setter
+      const nativeValueSetter = Object.getOwnPropertyDescriptor(
+        window.HTMLTextAreaElement.prototype,
+        "value"
+      )?.set;
+
+      if (nativeValueSetter && chatInput.tagName === "TEXTAREA") {
+        nativeValueSetter.call(chatInput, safePrompt);
       } else {
         chatInput.innerText = safePrompt;
       }
-      // 2. FORCE React to notice the change before sending
+
+      // 2. Dispatch input event to sync state
       chatInput.dispatchEvent(new Event("input", { bubbles: true }));
+
       console.log("Original Prompt:", userPrompt);
       console.log("Replaced with Sanitized Prompt:", safePrompt);
     }
   }
 }
 
-// Listen for the Enter key press
+// 1. Listen for Enter key in CAPTURE phase (3rd argument true)
 document.addEventListener("keydown", function (event) {
-  if (event.key === "Enter" && !event.shiftKey) {//prevents shift key
+  if (event.key === "Enter" && !event.shiftKey) {
     handlePromptSubmission();
   }
-});
+}, true); // <-- 'true' intercepts the event BEFORE ChatGPT handles it
 
-// Listen for clicks on the Send Arrow Button
+// 2. Listen for Send Button click in CAPTURE phase
 document.addEventListener("click", function (event) {
-  // Check if the clicked element (or its parent icon) is the send button
   const sendButton = event.target.closest('button[data-testid="send-button"]');
-
   if (sendButton) {
     handlePromptSubmission();
   }
-});
-
+}, true);
