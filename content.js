@@ -5,19 +5,33 @@ const EMAIL_REGEX = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;// any cha
 const NAME_REGEX = /\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+\b/g;//capital followed by lowercase, space, same again, first last
 const PHONE_REGEX = /\b(?:\+?1[-. ]?)?\(?([0-9]{3})\)?[-. ]?([0-9]{3})[-. ]?([0-9]{4})\b/g;
 const SSN_REGEX = /\b(?!000|666|9\d{2})\d{3}[- ]?(?!00)\d{2}[- ]?(?!0000)\d{4}\b/g;
+// Matches capitalized words followed by keywords like High, Middle, Elementary, Academy, School, Institute, etc.
+const SCHOOL_REGEX = /\b(?:[A-Z][a-z0-9'-]+\s+)+(?:Elementary(?:\s+School)?|Middle(?:\s+School)?|High(?:\s+School)?|Academy|Institute|School|University|College|Prep(?:aratory)?(?:\s+School)?)\b/gi;
+// Matches "I'm", "I am", "im", "Im", "i am", etc., followed by a Name
+const INTRO_IM_REGEX = /\b(?:i'?m|i\s+am)\s+([A-Z][a-z]+)\b/gi;
+// Matches "my name is", "my name's", "my names", "my name is", etc., followed by a Name
+const INTRO_NAME_REGEX = /\bmy\s+names?('?s)?\s+is?\s+([A-Z][a-z]+)\b/gi;
+// Matches titles (Mr, Mrs, Ms, Miss, Doctor, etc.) followed by a capitalized Last Name or Full Name
+const TEACHER_REGEX = /\b(?:M[rs]s?|Miss|Dr|Doctor|Mister|Madam|Professor)\.?\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\b/gi;
 
 function sanitizeText(rawText) {
-  // Replace emails with [EMAIL]
-  let cleanText = rawText.replace(EMAIL_REGEX, "[EMAIL]");
+  let cleanText = rawText;
 
-  // Replace potential full names with [NAME]
-  cleanText = cleanText.replace(NAME_REGEX, "[NAME]");
+  // 1. Redact Emails, Phones, SSNs
+  cleanText = cleanText.replace(EMAIL_REGEX, "[REDACTED EMAIL]");
+  cleanText = cleanText.replace(PHONE_REGEX, "[REDACTED PHONE]");
+  cleanText = cleanText.replace(SSN_REGEX, "[REDACTED SSN]");
 
-  // Replace phone numbers with [PHONE]
-  cleanText = cleanText.replace(PHONE_REGEX, "[PHONE]");
+  // 2. Redact phrase-based introductions ("I'm Alex", "my name is Sam")
+  cleanText = cleanText.replace(INTRO_IM_REGEX, "[REDACTED INTRO]");
+  cleanText = cleanText.replace(INTRO_NAME_REGEX, "my name is [REDACTED NAME]");
 
-  // Replace SSNs with [SSN]
-  cleanText = cleanText.replace(SSN_REGEX, "[SSN]");
+  // 3. Redact standalone Full Names ("John Smith")
+  cleanText = cleanText.replace(NAME_REGEX, "[REDACTED NAME]");
+
+  // 4. Redact School and Teacher Names
+  cleanText = cleanText.replace(SCHOOL_REGEX, "[REDACTED SCHOOL]");
+  cleanText = cleanText.replace(TEACHER_REGEX, "[REDACTED TEACHER]");
 
   return cleanText;
 }
