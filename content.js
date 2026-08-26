@@ -4,13 +4,15 @@ console.log("PII Redactor Content Script Loaded");
 // Local memory vault (resides ONLY in the user's browser)
 let piiVault = {};
 let tokenCounter = 0;
+let isHunting = true;
 // Define our Regex Patterns
 const EMAIL_REGEX = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;// any character, @, any character, ., 2 or more characters, g means global search, so it will find all emails in the prompt
 const NAME_REGEX = /\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+\b/g;//capital followed by lowercase, space, same again, first last
 const PHONE_REGEX = /\b(?:\+?1[-. ]?)?\(?([0-9]{3})\)?[-. ]?([0-9]{3})[-. ]?([0-9]{4})\b/g;
 const SSN_REGEX = /\b(?!000|666|9\d{2})\d{3}[- ]?(?!00)\d{2}[- ]?(?!0000)\d{4}\b/g;
 // Matches capitalized words followed by keywords like High, Middle, Elementary, Academy, School, Institute, etc.
-const SCHOOL_REGEX = /\b(?:[A-Z][a-z0-9'-]+\s+)+(?:Elementary(?:\s+School)?|Middle(?:\s+School)?|High(?:\s+School)?|Academy|Institute|School|University|College|Prep(?:aratory)?(?:\s+School)?)\b/gi;
+// Matches strictly 1 or 2 capitalized words followed by a school suffix keyword
+const SCHOOL_REGEX = /\b([A-Z][a-z0-9'-]+(?:\s+[A-Z][a-z0-9'-]+)?)\s+(?:Elementary(?:\s+School)?|Middle(?:\s+School)?|High(?:\s+School)?|Academy|Institute|School|University|College|Prep(?:aratory)?(?:\s+School)?)\b/g;
 // Matches "I'm", "I am", "im", "Im", "i am", etc., followed by a Name
 const INTRO_IM_REGEX = /\b(?:i'?m|i\s+am)\s+([A-Z][a-z]+)\b/gi;
 // Matches "my name is", "my name's", "my names", "my name is", etc., followed by a Name
@@ -22,14 +24,24 @@ function tokenizePII(rawText) {
   let cleanText = rawText;
 
   // Helper function to tokenize matches for a specific regex and label
-  function replaceWithToken(text, regex, typeLabel) {
-    return text.replace(regex, (match) => {
-      tokenCounter++;
-      const token = `{{${typeLabel}_${tokenCounter}}}`;
-      piiVault[token] = match; // Store original value in the vault
-      return token;            // Replace with the generated token
-    });
-  }
+ function replaceWithToken(text, regex, typeLabel) {
+  return text.replace(regex, (match) => {
+    // Check if we already tokenized this exact piece of text
+    const existingToken = Object.keys(piiVault).find(
+      (key) => piiVault[key] === match
+    );
+
+    if (existingToken) {
+      return existingToken; // Reuse existing token
+    }
+
+    // Otherwise, create a new token
+    tokenCounter++;
+    const token = `{{${typeLabel}_${tokenCounter}}}`;
+    piiVault[token] = match;
+    return token;
+  });
+}
 
   // 1. Structured PII
   cleanText = replaceWithToken(cleanText, EMAIL_REGEX, "EMAIL");
@@ -47,6 +59,7 @@ function tokenizePII(rawText) {
   // 4. Standalone Names
   cleanText = replaceWithToken(cleanText, NAME_REGEX, "NAME");
 
+  console.log("Vault state right now:", piiVault);
   return cleanText;
 }
 
@@ -84,39 +97,132 @@ function handlePromptSubmission() {
 // 1. Listen for Enter key in CAPTURE phase (3rd argument true)
 document.addEventListener("keydown", function (event) {
   if (event.key === "Enter" && !event.shiftKey) {
+    event.preventDefault();
+    event.stopImmediatePropagation();
     handlePromptSubmission();
+    // Trigger submission programmatically after updating state
+    setTimeout(() => {
+      const sendButton = document.querySelector('button[data-testid="send-button"]');
+      if (sendButton) sendButton.click();
+    }, 50);
   }
 }, true); // <-- 'true' intercepts the event BEFORE ChatGPT handles it
 
 // 2. Listen for Send Button click in CAPTURE phase
-document.addEventListener("click", function (event) {
+let isProgrammaticClick = false;
+
+document.addEventListener("click", function(event) {
   const sendButton = event.target.closest('button[data-testid="send-button"]');
+  
   if (sendButton) {
+    // If this click was triggered by our setTimeout, let ChatGPT handle it normally
+    if (isProgrammaticClick) {
+      isProgrammaticClick = false;
+      return; 
+    }
+
+    // Stop ChatGPT from reading the unredacted text on the initial click
+    event.preventDefault();
+    event.stopImmediatePropagation();
+
+    // Run your existing submission/tokenizing function
     handlePromptSubmission();
+
+    // Re-trigger the click now that React and the text box have clean text
+    setTimeout(() => {
+      isProgrammaticClick = true;
+      sendButton.click();
+    }, 50);
   }
-}, true);
+}, true); // Capture phase
 
 // Watch ChatGPT's response container for new incoming text
-const observer = new MutationObserver((mutations) => {
+// ==========================================
+// SEAMLESS UI RESTORER (Integrated)
+// ==========================================
+const uiObserver = new MutationObserver((mutations) => {
+  // If there are no replacements saved in the vault, do nothing
+  if (!isHunting || Object.keys(piiVault).length === 0) return;
+
   mutations.forEach((mutation) => {
-    mutation.addedNodes.forEach((node) => {
-      if (node.nodeType === Node.ELEMENT_NODE) {
-        
-        // Search through the response text for any {{NAME_X}} tokens
-        for (const [token, realValue] of Object.entries(piiVault)) {
-          if (node.innerText && node.innerText.includes(token)) {
-            // Swap the token back to the real name on the screen!
-            node.innerText = node.innerText.replaceAll(token, realValue);
+    if (mutation.type === 'childList') {
+      mutation.addedNodes.forEach((node) => {
+        if (node.nodeType === Node.ELEMENT_NODE) {
+          // CRITICAL: Skip the active typing area so text stays redacted while typing/sending!
+          if (
+            node.closest('rich-textarea') || 
+            node.closest('[role="textbox"]') || 
+            node.closest('textarea')
+          ) {
+            return;
+          }
+
+          // Walk through all text nodes inside newly added response bubbles
+          const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT, null, false);
+          let textNode;
+
+          while ((textNode = walker.nextNode())) {
+            let nodeText = textNode.nodeValue;
+            let nodeChanged = false;
+
+            // Loop through stored tokens in your vault and swap them back on screen
+            for (const [token, originalValue] of Object.entries(piiVault)) {
+              // Escape special regex characters in the token (e.g. {{NAME_1}})
+              const regex = new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+              
+              if (regex.test(nodeText)) {
+                nodeText = nodeText.replace(regex, originalValue);
+                nodeChanged = true;
+              }
+            }
+
+            // Update the screen text seamlessly
+            if (nodeChanged) {
+              textNode.nodeValue = nodeText;
+            }
           }
         }
-
-      }
-    });
+      });
+    }
   });
 });
 
-// Start watching the main chat container
-const chatContainer = document.querySelector("main");
-if (chatContainer) {
-  observer.observe(chatContainer, { childList: true, subtree: true });
+// Start watching the DOM
+uiObserver.observe(document.body, { childList: true, subtree: true });
+
+/*
+function replaceTokensInNode(node) {
+  // If the vault is empty, stop
+  if (!piiVault || Object.keys(piiVault).length === 0) return;
+
+  // Handle standard text nodes
+  if (node.nodeType === Node.TEXT_NODE) {
+    let text = node.nodeValue;
+    let updated = false;
+
+    for (const [token, realValue] of Object.entries(piiVault)) {
+      if (text.includes(token)) {
+        text = text.replaceAll(token, realValue);
+        updated = true;
+      }
+    }
+
+    if (updated) {
+      node.nodeValue = text;
+    }
+    return;
+  }
+
+  // Handle Canvas or editable elements
+  if (node.nodeType === Node.ELEMENT_NODE) {
+    // Check if element contains text matching any stored tokens
+    for (const token of Object.keys(piiVault)) {
+      if (node.innerHTML && node.innerHTML.includes(token)) {
+        // Recursively check child nodes to avoid breaking HTML formatting
+        node.childNodes.forEach(replaceTokensInNode);
+        break;
+      }
+    }
+  }
 }
+  */

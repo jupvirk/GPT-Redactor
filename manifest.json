@@ -4,16 +4,13 @@
   "version": "1.0",
   "description": "Grabs text typed into ChatGPT",
   "host_permissions": [
-  "https://chatgpt.com/*",
-  "https://gemini.google.com/*"
+  "https://chatgpt.com/*"
   ],
-  "content_scripts": [
-    {
-      "matches": 
-      ["https://chatgpt.com/*"
-    , "https://gemini.google.com/*"
-  ],
-      "js": ["content.js"]
-    }
-  ]
+ "content_scripts": [
+  {
+    "matches": ["https://chatgpt.com/*"],
+    "js": ["content.js"],
+    "all_frames": false
+  }
+]
 }
