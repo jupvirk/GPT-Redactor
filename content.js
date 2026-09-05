@@ -63,6 +63,83 @@ function tokenizePII(rawText) {
   return cleanText;
 }
 
+// ==========================================
+// 1. REACT STATE UPDATER & SMART LOCATOR
+// ==========================================
+function updateReactInput(element, newText) {
+  element.focus();
+  document.execCommand('selectAll', false, null);
+  document.execCommand('insertText', false, newText);
+  element.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+  element.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
+}
+
+function getActiveInputBox(event) {
+  // If the user hit Enter, the target is exactly the box they are typing in
+  if (event && event.type === 'keydown' && event.target) {
+    return event.target;
+  }
+
+  // If they clicked Send, find the active editable box
+  const potentialBoxes = document.querySelectorAll('textarea, rich-textarea div[contenteditable="true"], [contenteditable="true"]');
+  for (let box of potentialBoxes) {
+    if (box.closest('user-message') || box.hasAttribute('readonly')) continue;
+    const text = box.value || box.innerText || box.textContent || "";
+    if (text.trim().length > 0) return box;
+  }
+  return null;
+}
+
+// ==========================================
+// 2. CORE INTERCEPTION LOGIC
+// ==========================================
+let isSimulating = false; // Prevents infinite loops
+
+function handleInterception(event, isClickAction, targetBtn = null) {
+  const inputBox = getActiveInputBox(event);
+  if (!inputBox) return; // Abort if no valid box is found
+
+  const originalText = inputBox.value || inputBox.innerText || inputBox.textContent || "";
+  if (!originalText.trim()) return;
+
+  // Run your existing regex tokenization here
+  const cleanText = tokenizePII(originalText);
+
+  // If PII was found and redacted
+  if (cleanText !== originalText) {
+    // Stop ChatGPT from reading the unredacted text
+    event.preventDefault();
+    event.stopImmediatePropagation();
+
+    console.log("Original Prompt:", originalText);
+    console.log("Replaced with Tokenized Prompt:", cleanText);
+    console.log("PII Vault:", piiVault);
+
+    // Turn on the UI Restorer
+    isHunting = true;
+
+    // Force React to accept the tokenized text
+    updateReactInput(inputBox, cleanText);
+
+    // Re-trigger the submission slightly after state updates
+    setTimeout(() => {
+      isSimulating = true;
+
+      if (isClickAction && targetBtn) {
+        targetBtn.click();
+      } else {
+        // Dispatch synthetic Enter specifically to the active box
+        inputBox.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, composed: true
+        }));
+      }
+
+      // Unlock simulation after a tiny buffer
+      setTimeout(() => { isSimulating = false; }, 200);
+    }, 0); // Kept at 0ms to prevent visual flash
+  }
+}
+/*
 function handlePromptSubmission() {
   const chatInput = document.querySelector("#prompt-textarea");
 
@@ -93,6 +170,7 @@ function handlePromptSubmission() {
     }
   }
 }
+
 
 // 1. Listen for Enter key in CAPTURE phase (3rd argument true)
 document.addEventListener("keydown", function (event) {
@@ -135,11 +213,14 @@ document.addEventListener("click", function(event) {
     }, 50);
   }
 }, true); // Capture phase
+*/
 
 // Watch ChatGPT's response container for new incoming text
 // ==========================================
 // SEAMLESS UI RESTORER (Integrated)
 // ==========================================
+
+
 const uiObserver = new MutationObserver((mutations) => {
   // If there are no replacements saved in the vault, do nothing
   if (!isHunting || Object.keys(piiVault).length === 0) return;
@@ -190,39 +271,35 @@ const uiObserver = new MutationObserver((mutations) => {
 // Start watching the DOM
 uiObserver.observe(document.body, { childList: true, subtree: true });
 
-/*
-function replaceTokensInNode(node) {
-  // If the vault is empty, stop
-  if (!piiVault || Object.keys(piiVault).length === 0) return;
+// ==========================================
+// 3. CAPTURE PHASE LISTENERS
+// ==========================================
 
-  // Handle standard text nodes
-  if (node.nodeType === Node.TEXT_NODE) {
-    let text = node.nodeValue;
-    let updated = false;
-
-    for (const [token, realValue] of Object.entries(piiVault)) {
-      if (text.includes(token)) {
-        text = text.replaceAll(token, realValue);
-        updated = true;
-      }
-    }
-
-    if (updated) {
-      node.nodeValue = text;
-    }
-    return;
+// Intercept Enter Key
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Enter" && !event.shiftKey && !isSimulating) {
+    handleInterception(event, false);
   }
+}, true); // Capture phase
 
-  // Handle Canvas or editable elements
-  if (node.nodeType === Node.ELEMENT_NODE) {
-    // Check if element contains text matching any stored tokens
-    for (const token of Object.keys(piiVault)) {
-      if (node.innerHTML && node.innerHTML.includes(token)) {
-        // Recursively check child nodes to avoid breaking HTML formatting
-        node.childNodes.forEach(replaceTokensInNode);
-        break;
-      }
+// Intercept Mouse Clicks (including early mouse-down events)
+function handleMouseInterception(event) {
+  if (isSimulating) return;
+
+  const targetBtn = event.target.closest('button, [role="button"]');
+  if (targetBtn) {
+    // Check if the button looks like a send button
+    const btnData = targetBtn.outerHTML.toLowerCase() +
+                    (targetBtn.getAttribute('aria-label') || '').toLowerCase() +
+                    (targetBtn.getAttribute('data-tooltip') || '').toLowerCase();
+
+    if (btnData.includes('send')) {
+      handleInterception(event, true, targetBtn);
     }
   }
 }
-  */
+
+// Bind to all phases of a click to beat React to the punch
+document.addEventListener("pointerdown", handleMouseInterception, true);
+document.addEventListener("mousedown", handleMouseInterception, true);
+document.addEventListener("click", handleMouseInterception, true);
