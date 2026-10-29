@@ -1,11 +1,11 @@
-# 🛡️ GPT-Redactor
+# GPT-Redactor
 
 > **Client-Side PII Tokenization & Privacy Vault for ChatGPT**  
 > Protect your sensitive personal data before it ever hits OpenAI servers.
 
 ---
 
-## 📌 Overview
+## Overview
 
 **GPT-Redactor** is a high-performance, client-side Chrome Extension (Manifest V3) designed to prevent accidental leakage of Personally Identifiable Information (PII) when using [ChatGPT](https://chatgpt.com). 
 
@@ -49,15 +49,15 @@ When ChatGPT streams its response, a live DOM observer seamlessly restores the t
 
 ---
 
-## ✨ Features
+## Features
 
-- **🔒 Zero-Knowledge Privacy Architecture**  
+- **Zero-Knowledge Privacy Architecture**  
   PII is never written to disk, sent to external analytics, or transmitted over any network socket. The vault resides strictly in volatile browser memory.
-- **⚡ Capture-Phase Event Interception**  
+- **Capture-Phase Event Interception**  
   Listens for `Enter` keystrokes and pointer/mouse clicks (`pointerdown`, `mousedown`, `click`) during the event capture phase to intercept input before ChatGPT's React event handlers can process it.
-- **🔄 React State Synchronization**  
+- **React State Synchronization**  
   Uses DOM command dispatching (`execCommand('insertText')`) and synthetic `input`/`change` event cascades to ensure ChatGPT's internal React virtual DOM state remains perfectly in sync without triggering infinite re-render loops.
-- **🎯 Intelligent PII Detection Suite**  
+- **Intelligent PII Detection Suite**  
   Detects and tokenizes multiple categories of sensitive data using battle-tested pattern matching:
   - **Emails**: Standard and international email addresses.
   - **Phone Numbers**: US formats with optional country code, delimiters, and parentheses.
@@ -82,7 +82,7 @@ GPT-Redactor/
 
 ---
 
-## 🚀 Installation & Usage
+## Installation & Usage
 
 ### 1. Load Extension in Chrome
 
@@ -114,7 +114,7 @@ GPT-Redactor/
 
 ---
 
-## 🔍 How It Works Under the Hood
+## How It Works Under the Hood
 
 ### 1. Tokenization (`tokenizePII`)
 Matches raw user text against regex definitions in strict priority order (structured PII first, then contextual introductions, then generic names). Each unique match receives a numbered placeholder (e.g., `{{EMAIL_1}}`), and repeated occurrences reuse existing tokens.
@@ -130,20 +130,8 @@ When ChatGPT renders response tokens into the DOM, the observer traverses child 
 
 ---
 
-## 🛡️ Security & Privacy Principles
+## Security & Privacy Principles
 
 - **No Remote Servers**: GPT-Redactor does not communicate with any third-party server or API.
 - **Volatile Storage**: The token vault resides strictly in browser RAM and is reset when the page is reloaded.
 - **Zero Disk Persistence**: Sensitive values are never persisted to `localStorage`, `indexedDB`, or browser cookies.
-
----
-
-## 🤝 Contributing
-
-Contributions, issues, and feature requests are welcome! Feel free to check the issues tab or submit a pull request.
-
----
-
-## 📄 License
-
-This project is licensed under the [MIT License](LICENSE).
